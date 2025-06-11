@@ -112,8 +112,9 @@ class NanoVLMWrapper(lmms):
         for chunk in chunks:
             contexts, all_gen_kwargs, doc_to_visual, doc_id, task, split = zip(*chunk)
             visuals = [doc_to_visual[0](self.task_dict[task][split][ids]) for ids, task, split in zip(doc_id, task, split)]
-            
-            collator_input_batch = []
+            images = self._prepare_visual_input(self.flatten(visuals))
+
+            messages = []
             for i in range(len(contexts)):
                 current_context_str = contexts[i]
                 current_visuals_list = visuals[i] # List of PIL Images for this sample, or None
@@ -128,20 +129,24 @@ class NanoVLMWrapper(lmms):
                 
                 # Format text_data as a list of message dictionaries
                 messages_for_item = [{"role": "user", "content": prompt_content}]
+                messages.append(messages_for_item)
                 
-                # Process images; _prepare_visual_input returns a stacked tensor or None
-                processed_images_tensor = self._prepare_visual_input(current_visuals_list) if current_visuals_list else None
-                                
-                collator_item = {
-                    "text_data": messages_for_item,
-                    "images": processed_images_tensor 
-                }
-                collator_input_batch.append(collator_item)
+                # # Process images; _prepare_visual_input returns a stacked tensor or None
+                # processed_images_tensor = self._prepare_visual_input(current_visuals_list) if current_visuals_list else None
+                # images.append(processed_images_tensor)
+                
+            prompts = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            inputs = self.tokenizer(
+                prompts,
+                return_tensors="pt",
+                padding="longest",
+                truncation=True,
+                max_length=self.max_length
+            )
 
-            prepared_inputs = self.collator(collator_input_batch)
-            input_ids = prepared_inputs["input_ids"].to(self.device)
-            images_tensor = prepared_inputs["image"].to(self.device)
-            attention_mask = prepared_inputs["attention_mask"].to(self.device)
+            input_ids = inputs["input_ids"].to(self.device)
+            attention_mask = inputs["attention_mask"].to(self.device)
+            images = images.to(self.device)
 
             # Extract generation parameters for the batch
             # We use the gen_kwargs from the first item in the chunk, assuming they are uniform for the batch.
@@ -159,7 +164,7 @@ class NanoVLMWrapper(lmms):
             # Generate
             generated_ids_batch = self.model.generate(
                 input_ids,
-                images_tensor,
+                images,
                 attention_mask,
                 max_new_tokens=max_new_tokens,
                 greedy=greedy,
