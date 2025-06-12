@@ -120,11 +120,14 @@ huggingface-cli login
 # Evaluate a trained model on multiple benchmarks
 python evaluation.py --model lusxvr/nanoVLM-450M --tasks mmstar,mme
 
-# If you want to log the results to wandb, you have to pass the details in the command
-python evaluation.py
-  --model checkpoints/nanoVLM_siglip2-base-patch16-256_mp2_SmolLM2-360M-Instruct_8xGPU_1630251samples_bs1024_ep5_lr5e-05-0.00512_0611-213529 
-  --tasks mmstar,mmmu,ocrbench,docvqa 
-  --wandb_args project=nanoVLM,name=nanoVLM_siglip2-base-patch16-256_mp2_SmolLM2-360M-Instruct_8xGPU_1630251samples_bs1024_ep5_lr5e-05-0.00512_0611-213529
+# If you want to use it during training, simply import the module and call it just as you would from the command line.
+# You can pass all the arguments you can also pass in the command line
+from evaluation import evaluate
+results = evaluate(
+    model='lusxvr/nanoVLM-450M', # This can be either a checkpoint path or the model itself
+    tasks='mmstar,mmmu,ocrbench',
+    batch_size=128 # Adapt this to your GPU, needs to be passed to avoid an OOM Error
+)
 ```
 
 ## Hub integration

@@ -52,7 +52,6 @@ class NanoVLMWrapper(lmms):
         # Get tokenizer and image processor from model config if not provided
         self.tokenizer = get_tokenizer(self.model.cfg.lm_tokenizer, self.model.cfg.vlm_extra_tokens)
         self.image_processor = get_image_processor(self.model.cfg.vit_img_size)
-        self.collator = VQACollator(self.tokenizer, self.model.cfg.lm_max_position_embeddings)
             
     def _prepare_visual_input(self, visual_list: List[Image.Image]) -> Optional[torch.Tensor]:
         """Convert visual inputs to model format."""
