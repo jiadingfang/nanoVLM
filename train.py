@@ -18,7 +18,7 @@ torch.manual_seed(0)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(0)
 
-from data.collators import VQACollator, MMStarCollator
+from data.collators import VQACollator, MMStarCollator, BufferedCollator
 from data.datasets import MMStarDataset, VQADataset
 from data.processors import get_image_processor, get_tokenizer
 from models.vision_language_model import VisionLanguageModel
@@ -104,6 +104,8 @@ def get_dataloaders(train_cfg, vlm_cfg):
 
     # Create collators
     vqa_collator = VQACollator(tokenizer, vlm_cfg.lm_max_length)
+    buffered_vqa_train_collator = BufferedCollator(vqa_collator, target_batch_size=16)
+    buffered_vqa_val_collator = BufferedCollator(vqa_collator, target_batch_size=16)
     mmstar_collator = MMStarCollator(tokenizer)
 
     g = torch.Generator()
@@ -120,7 +122,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
         train_dataset,
         batch_size=train_cfg.batch_size,    # =per device BS in DDP
         sampler=train_sampler,
-        collate_fn=vqa_collator,
+        collate_fn=buffered_vqa_train_collator,
         num_workers=8,
         pin_memory=True,
         drop_last=True,
@@ -139,7 +141,7 @@ def get_dataloaders(train_cfg, vlm_cfg):
         val_dataset,
         batch_size=train_cfg.batch_size,
         sampler=val_sampler,
-        collate_fn=vqa_collator,
+        collate_fn=buffered_vqa_val_collator,
         num_workers=8,
         pin_memory=True,
         drop_last=True,
@@ -164,13 +166,13 @@ def test_mmstar(model, tokenizer, test_loader, device):
     correct_predictions = 0
     with torch.no_grad():
         for batch in test_loader:
-            image = batch['images'].to(device)
+            images = batch['images']
             input_ids = batch['input_ids'].to(device)
             labels = batch['labels'].to(device)
             attention_mask = batch['attention_mask'].to(device)
 
             correct_answer = tokenizer.batch_decode(labels, skip_special_tokens=True)
-            gen = model.generate(input_ids, image, attention_mask, greedy=True, max_new_tokens=10)
+            gen = model.generate(input_ids, images, attention_mask, greedy=True, max_new_tokens=10)
             model_output = tokenizer.batch_decode(gen, skip_special_tokens=True)
             
             is_correct = utils.check_multiple_choice_with_regex(model_output, correct_answer)
@@ -203,8 +205,8 @@ def train(train_cfg, vlm_cfg):
     tokenizer = get_tokenizer(vlm_cfg.lm_tokenizer, vlm_cfg.vlm_extra_tokens, vlm_cfg.lm_chat_template)
 
     total_dataset_size = len(train_loader.dataset)
+    run_name = get_run_name(train_cfg, vlm_cfg)
     if train_cfg.log_wandb and is_master():
-        run_name = get_run_name(train_cfg, vlm_cfg)
         if train_cfg.data_cutoff_idx is None:
             run_name = run_name.replace("full_ds", f"{total_dataset_size}samples")
         run = wandb.init(
@@ -271,7 +273,7 @@ def train(train_cfg, vlm_cfg):
         for i, batch in enumerate(train_loader):
             is_update_step = (i + 1) % train_cfg.gradient_accumulation_steps == 0 or i + 1 == len(train_loader)
             batch_start_time = time.time()
-            images = batch["image"].to(device)
+            images = batch["images"]
             input_ids = batch["input_ids"].to(device)
             labels = batch["labels"].to(device)
             attention_mask = batch["attention_mask"].to(device)
@@ -291,7 +293,6 @@ def train(train_cfg, vlm_cfg):
                 dtype=torch.bfloat16 if device.type in ['cuda', 'cpu'] else torch.float16
             )
             with autocast_context:
-
                 with context:
                     _, loss = model(input_ids, images, attention_mask=attention_mask, targets=labels)
 
@@ -335,7 +336,7 @@ def train(train_cfg, vlm_cfg):
                     save = False
                     total_val_loss = 0
                     for batch in val_loader:
-                        images = batch["image"].to(device)
+                        images = batch["images"]
                         input_ids = batch["input_ids"].to(device)
                         labels = batch["labels"].to(device)
                         attention_mask = batch["attention_mask"].to(device)
@@ -426,7 +427,7 @@ def main():
     parser.add_argument('--vlm_checkpoint_path', type=str, help='Path to the VLM checkpoint for loading or saving')
     parser.add_argument('--compile', type=bool, help='Use torch.compile to optimize the model')
     parser.add_argument('--resume_from_vlm_checkpoint', type=bool, default=False, help='Resume training from VLM checkpoint specified by vlm_checkpoint_path (or default if not provided)')
-    parser.add_argument('--log_wandb', type=bool, default=True, help='Log to wandb')
+    parser.add_argument('--no_log_wandb', action='store_true', help='Do not log to wandb')
 
     args = parser.parse_args()
 
@@ -441,8 +442,8 @@ def main():
         vlm_cfg.vlm_checkpoint_path = args.vlm_checkpoint_path
     if args.compile is not None:
         train_cfg.compile = args.compile
-    if args.log_wandb is not None:
-        train_cfg.log_wandb = args.log_wandb
+    if args.no_log_wandb is True:
+        train_cfg.log_wandb = False
 
     if args.resume_from_vlm_checkpoint and args.vlm_checkpoint_path is not None:
         train_cfg.resume_from_vlm_checkpoint = True
