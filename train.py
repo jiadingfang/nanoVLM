@@ -369,6 +369,8 @@ def train(train_cfg, vlm_cfg):
                                 tasks=train_cfg.lmms_eval_tasks,
                                 limit=train_cfg.lmms_eval_limit,
                                 batch_size=train_cfg.lmms_eval_batch_size,
+                                process_with_media=True,
+                                device=device,
                             )
                             if eval_results and "results" in eval_results[0]:
                                 for task_name, task_results in eval_results[0]["results"].items():
