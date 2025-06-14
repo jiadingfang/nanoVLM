@@ -110,7 +110,7 @@ def parse_eval_args() -> argparse.Namespace:
         "--batch_size",
         "-b",
         type=str,
-        default=128,
+        default=32,
         metavar="auto|auto:N|N",
         help="Acceptable values are 'auto', 'auto:N' or N, where N is an integer. Default 1.",
     )
@@ -249,7 +249,7 @@ def parse_eval_args() -> argparse.Namespace:
         default=False,
         help="Use with --log_samples. Only model outputs will be saved and metrics will not be evaluated.",
     )
-    default_seed_string = "0,1234,1234,1234"
+    default_seed_string = '0'
     parser.add_argument(
         "--seed",
         type=partial(_int_or_none_list_arg_type, 3, 4, default_seed_string),
@@ -281,7 +281,7 @@ def evaluate(
     tasks: str = None,
     model_args: str = "",
     num_fewshot: int = None,
-    batch_size: str = "128",
+    batch_size: str = "32",
     max_batch_size: int = None,
     device: str = "cuda",
     output_path: str = "results/",
