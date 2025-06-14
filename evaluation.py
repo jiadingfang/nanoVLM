@@ -414,7 +414,7 @@ def evaluate(
         args_list.append(args)
 
     # initialize Accelerator
-    kwargs_handler = InitProcessGroupKwargs(timeout=datetime.timedelta(seconds=60000))
+    kwargs_handler = InitProcessGroupKwargs(timeout=datetime.timedelta(seconds=6000))
     accelerator = Accelerator(kwargs_handlers=[kwargs_handler])
     if accelerator.is_main_process:
         is_main_process = True
@@ -612,6 +612,7 @@ def cli_evaluate_single(args: Union[argparse.Namespace, None] = None) -> None:
         fewshot_random_seed=args.seed[3],
         cli_args=args,
         datetime_str=datetime_str,
+        distributed_executor_backend='torchrun',
         **request_caching_args,
     )
 

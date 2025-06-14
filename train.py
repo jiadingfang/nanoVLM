@@ -353,6 +353,24 @@ def train(train_cfg, vlm_cfg):
                     if train_cfg.log_wandb and is_master():
                         run.log({"val_loss": avg_val_loss}, step=global_step)
 
+                    lmms_results = {}
+                    if train_cfg.use_lmms_eval and global_step % (train_cfg.eval_interval*2) == 0:
+                        eval_results = evaluate(
+                            model=model.module if is_dist() else model,
+                            tasks=train_cfg.lmms_eval_tasks,
+                            limit=train_cfg.lmms_eval_limit,
+                            batch_size=train_cfg.lmms_eval_batch_size,
+                            process_with_media=True,
+                            device=device,
+                        )
+                        #dist.barrier()
+                        print(f"{get_rank()}, {eval_results}")
+                        if is_master() and eval_results and "results" in eval_results[0]:
+                            for task_name, task_results in eval_results[0]["results"].items():
+                                for metric_name, metric_value in task_results.items():
+                                    if isinstance(metric_value, (int, float)):
+                                        lmms_results[f"lmms_{task_name}_{metric_name.split(',')[0]}"] = metric_value
+                        
                     if is_master() and global_step % (train_cfg.eval_interval*2) == 0:
                         eval_model = model.module if is_dist() else model  # unwrap the model for eval if DDP
                         epoch_accuracy = test_mmstar(eval_model, tokenizer, test_loader, device)
@@ -361,22 +379,6 @@ def train(train_cfg, vlm_cfg):
                             save = True
                         if save:
                             eval_model.save_pretrained(save_directory=os.path.join(vlm_cfg.vlm_checkpoint_path, run_name))
-                        
-                        lmms_results = {}
-                        if train_cfg.use_lmms_eval:
-                            eval_results = evaluate(
-                                model=eval_model,
-                                tasks=train_cfg.lmms_eval_tasks,
-                                limit=train_cfg.lmms_eval_limit,
-                                batch_size=train_cfg.lmms_eval_batch_size,
-                                process_with_media=True,
-                                device=device,
-                            )
-                            if eval_results and "results" in eval_results[0]:
-                                for task_name, task_results in eval_results[0]["results"].items():
-                                    for metric_name, metric_value in task_results.items():
-                                        if isinstance(metric_value, (int, float)):
-                                            lmms_results[f"lmms_{task_name}_{metric_name.split(',')[0]}"] = metric_value
                         
                         if train_cfg.log_wandb and is_master():    
                             run.log({"accuracy": epoch_accuracy, **lmms_results}, step=global_step)
