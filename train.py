@@ -363,8 +363,7 @@ def train(train_cfg, vlm_cfg):
                             process_with_media=True,
                             device=device,
                         )
-                        #dist.barrier()
-                        print(f"{get_rank()}, {eval_results}")
+
                         if is_master() and eval_results and "results" in eval_results[0]:
                             for task_name, task_results in eval_results[0]["results"].items():
                                 for metric_name, metric_value in task_results.items():
