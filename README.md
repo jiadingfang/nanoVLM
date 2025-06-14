@@ -77,7 +77,7 @@ To train nanoVLM, you can simply use the provided training script. After trainin
 ```bash
 wandb login --relogin
 huggingface-cli login
-python train.py
+torchrun --nproc_per_node=1 train.py
 ```
 which will use the default `models/config.py`.
 
@@ -121,7 +121,8 @@ huggingface-cli login
 python evaluation.py --model lusxvr/nanoVLM-450M --tasks mmstar,mme
 
 # If you want to use it during training, simply import the module and call it just as you would from the command line.
-# You can pass all the arguments you can also pass in the command line
+# You can pass all the arguments you can also pass in the command line.
+# The evaluation during training works in the full DDP setup.
 from evaluation import evaluate
 results = evaluate(
     model='lusxvr/nanoVLM-450M', # This can be either a checkpoint path or the model itself
